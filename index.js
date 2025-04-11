@@ -36,7 +36,9 @@ app.post("/upload", upload.single("image"), async (req, res) => {
       return res.status(400).json({ error: "請選擇圖片檔案上傳" });
     }
 
-    const timestamp = new Date().toLocaleString();
+    const timestamp = new Date().toLocaleString("zh-TW", {
+      timeZone: "Asia/Taipei",
+    });
     const id = uuidv4();
 
     const url = `https://image-analyzer-backend-8s8u.onrender.com/uploads/${file.filename}`;
@@ -94,6 +96,26 @@ app.get("/records", (req, res) => {
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: "讀取紀錄失敗" });
+  }
+});
+
+app.delete("/records/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE));
+    const record = data.find((r) => r.id === id);
+    if (!record) return res.status(404).json({ error: "找不到紀錄" });
+
+    const updated = data.filter((r) => r.id !== id);
+    fs.writeFileSync(DATA_FILE, JSON.stringify(updated, null, 2));
+
+    const filePath = path.join(UPLOAD_DIR, record.filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("刪除紀錄失敗：", e);
+    res.status(500).json({ error: "刪除紀錄失敗" });
   }
 });
 
