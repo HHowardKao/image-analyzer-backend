@@ -1,3 +1,4 @@
+// backend/index.js
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -8,7 +9,7 @@ const OpenAI = require("openai");
 require("dotenv").config();
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 const DATA_FILE = path.join(__dirname, "data.json");
@@ -32,9 +33,9 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     const file = req.file;
     const timestamp = new Date().toLocaleString();
     const id = uuidv4();
-    const url = `http://localhost:${PORT}/uploads/${file.filename}`;
 
-    // 呼叫 OpenAI 分析
+    const url = `https://image-analyzer-backend-8s8u.onrender.com/uploads/${file.filename}`;
+
     const gptResponse = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
