@@ -31,10 +31,16 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 app.post("/upload", upload.single("image"), async (req, res) => {
   try {
     const file = req.file;
+    if (!file) {
+      console.error("❌ 沒有收到圖片檔案");
+      return res.status(400).json({ error: "請選擇圖片檔案上傳" });
+    }
+
     const timestamp = new Date().toLocaleString();
     const id = uuidv4();
 
     const url = `https://image-analyzer-backend-8s8u.onrender.com/uploads/${file.filename}`;
+    console.log("📷 圖片 URL 傳給 OpenAI:", url);
 
     const gptResponse = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -72,8 +78,13 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 
     res.json(newEntry);
   } catch (error) {
-    console.error("Upload Error:", error);
-    res.status(500).json({ error: "圖片上傳或分析失敗" });
+    console.error("❌ Upload Error:", error);
+    res.status(500).json({
+      error: "圖片上傳或分析失敗",
+      message: error.message,
+      stack: error.stack,
+      details: error.error || null,
+    });
   }
 });
 
