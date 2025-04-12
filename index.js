@@ -74,7 +74,7 @@ app.post("/upload", upload.single("image"), async (req, res) => {
           content: [
             {
               type: "text",
-              text: `你是一位專業營養師，請根據這張圖片回覆下列項目：\n\n1. 食物項目（列出圖片中可辨識的食物）\n2. 根據圖片來估計熱量（卡路里）、碳水化合物(公克)、蛋白質(公克)、脂肪(公克)\n3. 數值加總值\n4. 餐點健康程度分析\n5. 飲食建議（如增加蔬菜、降低油脂）\n\n請使用繁體中文進行回答，並且以台灣人的語氣為主，若無法辨識請回覆「無法清楚辨識食物」。`,
+              text: `你是一位專業營養師，請根據這張圖片回覆下列項目：\n\n1. 食物項目（列出圖片中可辨識的食物）\n2. 根據圖片來估計熱量（卡路里）、碳水化合物(公克)、蛋白質(公克)、脂肪(公克)\n3. 數值加總值\n4. 餐點健康程度分析\n5. 飲食建議（如增加蔬菜、降低油脂）\n\n請使用繁體中文進行回答，並且以台灣人的語氣為主，若無法辨識請回覆「無法清楚辨識食物」，並且把多餘的符號移除。`,
             },
             {
               type: "image_url",
@@ -139,7 +139,7 @@ app.get("/recommendation", async (req, res) => {
       return res.status(400).json({ error: "尚未填寫個人資料" });
     }
 
-    const prompt = `以下是使用者的基本資料：\n性別：${profile.gender}\n年齡：${profile.age} 歲\n身高：${profile.height} cm\n體重：${profile.weight} kg\n目標：${profile.goal}。請你根據這些資訊，估算每日建議攝取的熱量（大卡）、蛋白質（公克）、脂肪（公克）、碳水化合物（公克），並簡單說明建議來源（如：依據 WHO 建議、衛福部建議、TDEE 等），使用繁體中文並條列回覆。`;
+    const prompt = `以下是使用者的基本資料：\n性別：${profile.gender}\n年齡：${profile.age} 歲\n身高：${profile.height} cm\n體重：${profile.weight} kg\n目標：${profile.goal}。請你根據這些資訊，估算每日建議攝取的熱量（大卡）、蛋白質（公克）、脂肪（公克）、碳水化合物（公克），並簡單說明建議來源（如：依據 WHO 建議、衛福部建議、TDEE 等），使用繁體中文以台灣人的語氣為主，並且把多餘的符號移除。`;
 
     const gptRes = await openai.chat.completions.create({
       model: "gpt-4o",
