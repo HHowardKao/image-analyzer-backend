@@ -1,3 +1,4 @@
+// backend/index.js
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -109,44 +110,6 @@ app.get("/records", (req, res) => {
   }
 });
 
-// ✅ GPT-4o 推薦每日營養攝取建議
-app.get("/nutrition-recommendation", async (req, res) => {
-  try {
-    const profile = JSON.parse(fs.readFileSync(PROFILE_FILE));
-
-    const prompt = `以下是使用者的基本資料：\n\n- 性別: ${
-      profile.gender
-    }\n- 年齡: ${profile.age} 歲\n- 身高: ${profile.height} cm\n- 體重: ${
-      profile.weight
-    } kg\n- 目標: ${
-      profile.goal === "gain"
-        ? "增肌"
-        : profile.goal === "loss"
-        ? "減脂"
-        : profile.goal === "control"
-        ? "控糖"
-        : "維持"
-    }\n\n請你根據這些資訊，推估其每日建議攝取熱量（卡路里）、碳水化合物、蛋白質與脂肪的範圍（單位：公克），並簡要說明推估的依據與建議。請使用繁體中文回答。`;
-
-    const gptRes = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    });
-
-    const recommendation =
-      gptRes.choices[0].message.content || "無法取得建議攝取資訊。";
-    res.json({ recommendation });
-  } catch (error) {
-    console.error("❌ Recommendation Error:", error);
-    res.status(500).json({ error: "無法產生建議攝取內容" });
-  }
-});
-
 // ❌ 刪除紀錄
 app.delete("/records/:id", (req, res) => {
   const { id } = req.params;
@@ -165,6 +128,29 @@ app.delete("/records/:id", (req, res) => {
   } catch (e) {
     console.error("刪除紀錄失敗：", e);
     res.status(500).json({ error: "刪除紀錄失敗" });
+  }
+});
+
+// 🧠 建議攝取量分析（GPT）
+app.get("/recommendation", async (req, res) => {
+  try {
+    const profile = JSON.parse(fs.readFileSync(PROFILE_FILE));
+    if (!profile || Object.keys(profile).length === 0) {
+      return res.status(400).json({ error: "尚未填寫個人資料" });
+    }
+
+    const prompt = `以下是使用者的基本資料：\n性別：${profile.gender}\n年齡：${profile.age} 歲\n身高：${profile.height} cm\n體重：${profile.weight} kg\n目標：${profile.goal}。請你根據這些資訊，估算每日建議攝取的熱量（大卡）、蛋白質（公克）、脂肪（公克）、碳水化合物（公克），並簡單說明建議來源（如：依據 WHO 建議、衛福部建議、TDEE 等），使用繁體中文並條列回覆。`;
+
+    const gptRes = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const result = gptRes.choices[0].message.content || "無法產生建議";
+    res.json({ content: result });
+  } catch (err) {
+    console.error("/recommendation error", err);
+    res.status(500).json({ error: "產生建議失敗" });
   }
 });
 
