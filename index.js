@@ -1,4 +1,3 @@
-// backend/index.js
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -60,8 +59,8 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     const taipeiTime = new Date().toLocaleString("sv-SE", {
       timeZone: "Asia/Taipei",
       hour12: false,
-    }); // e.g. '2025-04-12 15:23:45'
-    const timestamp = taipeiTime.replace(" ", "T") + "+08:00"; // => '2025-04-12T15:23:45+08:00'
+    });
+    const timestamp = taipeiTime.replace(" ", "T") + "+08:00";
 
     const id = uuidv4();
     const url = `https://image-analyzer-backend-8s8u.onrender.com/uploads/${file.filename}`;
@@ -107,6 +106,44 @@ app.get("/records", (req, res) => {
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: "讀取紀錄失敗" });
+  }
+});
+
+// ✅ GPT-4o 推薦每日營養攝取建議
+app.get("/nutrition-recommendation", async (req, res) => {
+  try {
+    const profile = JSON.parse(fs.readFileSync(PROFILE_FILE));
+
+    const prompt = `以下是使用者的基本資料：\n\n- 性別: ${
+      profile.gender
+    }\n- 年齡: ${profile.age} 歲\n- 身高: ${profile.height} cm\n- 體重: ${
+      profile.weight
+    } kg\n- 目標: ${
+      profile.goal === "gain"
+        ? "增肌"
+        : profile.goal === "loss"
+        ? "減脂"
+        : profile.goal === "control"
+        ? "控糖"
+        : "維持"
+    }\n\n請你根據這些資訊，推估其每日建議攝取熱量（卡路里）、碳水化合物、蛋白質與脂肪的範圍（單位：公克），並簡要說明推估的依據與建議。請使用繁體中文回答。`;
+
+    const gptRes = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
+
+    const recommendation =
+      gptRes.choices[0].message.content || "無法取得建議攝取資訊。";
+    res.json({ recommendation });
+  } catch (error) {
+    console.error("❌ Recommendation Error:", error);
+    res.status(500).json({ error: "無法產生建議攝取內容" });
   }
 });
 
