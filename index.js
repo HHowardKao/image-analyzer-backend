@@ -57,7 +57,12 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     const file = req.file;
     if (!file) return res.status(400).json({ error: "請選擇圖片上傳" });
 
-    const timestamp = new Date().toISOString(); // 改為標準 ISO 格式時間，避免解析問題
+    const taipeiTime = new Date().toLocaleString("sv-SE", {
+      timeZone: "Asia/Taipei",
+      hour12: false,
+    }); // e.g. '2025-04-12 15:23:45'
+    const timestamp = taipeiTime.replace(" ", "T") + "+08:00"; // => '2025-04-12T15:23:45+08:00'
+
     const id = uuidv4();
     const url = `https://image-analyzer-backend-8s8u.onrender.com/uploads/${file.filename}`;
 
