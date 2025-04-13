@@ -1,4 +1,3 @@
-// backend/index.js
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -51,8 +50,8 @@ app.post("/profile", (req, res) => {
   }
 });
 
-// 📤 圖片上傳與分析
-app.post("/upload", upload.single("image"), async (req, res) => {
+// 📤 圖片上傳（不分析）
+app.post("/upload", upload.single("image"), (req, res) => {
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ error: "請選擇圖片上傳" });
@@ -64,31 +63,14 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     const timestamp = taipeiTime.replace(" ", "T") + "+08:00";
 
     const id = uuidv4();
-    const url = `https://image-analyzer-backend-8s8u.onrender.com/uploads/${file.filename}`;
+    const newEntry = {
+      id,
+      filename: file.filename,
+      url: `https://image-analyzer-backend-8s8u.onrender.com/uploads/${file.filename}`,
+      timestamp,
+      analysis: "",
+    };
 
-    const gptResponse = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `你是一位專業營養師，請根據這張圖片回覆下列項目：\n\n1. 食物項目（列出圖片中可辨識的食物）\n2. 根據圖片來估計熱量（卡路里）、碳水化合物(公克)、蛋白質(公克)、脂肪(公克)\n3. 數值加總值\n4. 餐點健康程度分析\n5. 飲食建議（如增加蔬菜、降低油脂）\n\n請使用繁體中文進行回答，並且以台灣人的語氣為主，若無法辨識請回覆「無法清楚辨識食物」，並且把多餘的符號移除。`,
-            },
-            {
-              type: "image_url",
-              image_url: { url },
-            },
-          ],
-        },
-      ],
-    });
-
-    const analysis =
-      gptResponse.choices[0].message.content || "無法取得分析結果";
-
-    const newEntry = { id, filename: file.filename, url, timestamp, analysis };
     const existingData = JSON.parse(fs.readFileSync(DATA_FILE));
     existingData.push(newEntry);
     fs.writeFileSync(DATA_FILE, JSON.stringify(existingData, null, 2));
@@ -96,7 +78,46 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     res.json(newEntry);
   } catch (error) {
     console.error("❌ Upload Error:", error);
-    res.status(500).json({ error: "圖片分析失敗", message: error.message });
+    res.status(500).json({ error: "圖片上傳失敗", message: error.message });
+  }
+});
+
+// ✨ 分析 API：接收圖片 ID 與補充說明進行 GPT 分析
+app.post("/analyze", async (req, res) => {
+  try {
+    const { id, description } = req.body;
+    if (!id) return res.status(400).json({ error: "缺少圖片 ID" });
+
+    const data = JSON.parse(fs.readFileSync(DATA_FILE));
+    const target = data.find((r) => r.id === id);
+    if (!target) return res.status(404).json({ error: "找不到圖片紀錄" });
+
+    const promptText = `你是一位專業營養師，請根據這張圖片${
+      description ? "與補充說明『" + description + "』" : ""
+    }回覆下列項目：\n\n1. 食物項目（列出圖片中可辨識的食物）\n2. 根據圖片來估計熱量（卡路里）、碳水化合物(公克)、蛋白質(公克)、脂肪(公克)\n3. 數值加總值\n4. 餐點健康程度分析\n5. 飲食建議（如增加蔬菜、降低油脂）\n\n請使用繁體中文進行回答，並且以台灣人的語氣為主，若無法辨識請回覆「無法清楚辨識食物」，並且把多餘的符號移除。`;
+
+    const gptResponse = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: promptText },
+            { type: "image_url", image_url: { url: target.url } },
+          ],
+        },
+      ],
+    });
+
+    const analysis =
+      gptResponse.choices[0].message.content || "無法取得分析結果";
+    target.analysis = analysis;
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
+    res.json(target);
+  } catch (err) {
+    console.error("/analyze error", err);
+    res.status(500).json({ error: "分析失敗" });
   }
 });
 
