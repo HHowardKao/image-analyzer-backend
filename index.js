@@ -34,7 +34,6 @@ app.get("/", (req, res) => {
   res.send("✅ 健康日記分析師 API 已啟動");
 });
 
-// 取得個人資訊
 app.get("/profile", (req, res) => {
   try {
     const profile = JSON.parse(fs.readFileSync(PROFILE_FILE));
@@ -44,7 +43,6 @@ app.get("/profile", (req, res) => {
   }
 });
 
-// 儲存個人資訊
 app.post("/profile", (req, res) => {
   const profile = req.body;
   try {
@@ -55,7 +53,6 @@ app.post("/profile", (req, res) => {
   }
 });
 
-// 上傳圖片
 app.post("/upload", upload.single("image"), (req, res) => {
   try {
     const file = req.file;
@@ -83,7 +80,6 @@ app.post("/upload", upload.single("image"), (req, res) => {
   }
 });
 
-// 取得所有圖片紀錄
 app.get("/records", (req, res) => {
   try {
     const data = JSON.parse(fs.readFileSync(DATA_FILE));
@@ -93,7 +89,6 @@ app.get("/records", (req, res) => {
   }
 });
 
-// 取得補充文字
 app.get("/supplements", (req, res) => {
   try {
     const data = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
@@ -103,7 +98,67 @@ app.get("/supplements", (req, res) => {
   }
 });
 
-// 建議攝取量（GPT）
+app.post("/analyze", async (req, res) => {
+  try {
+    const { id, supplement } = req.body;
+    const data = JSON.parse(fs.readFileSync(DATA_FILE));
+    const entry = data.find((d) => d.id === id);
+    if (!entry) return res.status(404).json({ error: "找不到圖片紀錄" });
+
+    const url = `https://image-analyzer-backend-8s8u.onrender.com/uploads/${entry.filename}`;
+    const promptText = supplement?.trim()
+      ? `使用者補充說明：「${supplement}」\n請將此補充資訊視為可靠來源，與圖片內容一併分析，若有衝突，以補充文字為主。`
+      : "無補充說明，請僅依圖片進行分析。";
+
+    const prompt = `${promptText}
+
+你是一位具備專業營養師背景的助理，請根據上述資訊提供以下項目：
+
+1. 🍱 食物項目：
+- 請列出圖中或補充說明中包含的所有食物。
+
+2. 🔢 營養估算（每一餐整體）：
+- 熱量（大卡）：
+- 碳水化合物（公克）：
+- 蛋白質（公克）：
+- 脂肪（公克）：
+
+3. 💡 健康分析（200字內）：
+- 評估此餐是否均衡、是否高糖/高脂/高鈉，並提供合理推測。
+
+4. ✅ 飲食建議（100字內）：
+- 請以實際可行、簡短清楚為原則，例如「可增加蔬菜攝取」、「建議選擇低脂部位」。
+
+請使用自然流暢的繁體中文呈現，風格親切且具專業度，避免過度冗長。`;
+
+    const gptResponse = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url } },
+          ],
+        },
+      ],
+    });
+
+    const result = gptResponse.choices[0].message.content || "無法取得分析結果";
+    entry.analysis = result;
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
+    const supplementData = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
+    supplementData[id] = supplement || "";
+    fs.writeFileSync(SUPPLEMENT_FILE, JSON.stringify(supplementData, null, 2));
+
+    res.json({ success: true, analysis: result });
+  } catch (err) {
+    console.error("分析錯誤：", err);
+    res.status(500).json({ error: "分析失敗" });
+  }
+});
+
 app.get("/recommendation", async (req, res) => {
   try {
     const profile = JSON.parse(fs.readFileSync(PROFILE_FILE));
