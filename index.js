@@ -1,4 +1,4 @@
-// ✅ 完整後端 index.js（新增補充說明儲存與分析整合）
+// backend/index.js
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -34,7 +34,7 @@ app.get("/", (req, res) => {
   res.send("✅ 圖片上傳伺服器運作中！");
 });
 
-// 🔹 個人資料 API
+// 個人資訊 API
 app.get("/profile", (req, res) => {
   try {
     const profile = JSON.parse(fs.readFileSync(PROFILE_FILE));
@@ -45,37 +45,16 @@ app.get("/profile", (req, res) => {
 });
 
 app.post("/profile", (req, res) => {
+  const profile = req.body;
   try {
-    fs.writeFileSync(PROFILE_FILE, JSON.stringify(req.body, null, 2));
+    fs.writeFileSync(PROFILE_FILE, JSON.stringify(profile, null, 2));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "儲存個人資料失敗" });
   }
 });
 
-// 🔹 補充說明 API
-app.post("/supplements", (req, res) => {
-  const { id, note } = req.body;
-  try {
-    const data = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
-    data[id] = note;
-    fs.writeFileSync(SUPPLEMENT_FILE, JSON.stringify(data, null, 2));
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: "儲存補充說明失敗" });
-  }
-});
-
-app.get("/supplements", (req, res) => {
-  try {
-    const data = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: "讀取補充說明失敗" });
-  }
-});
-
-// 🔹 上傳圖片
+// 上傳圖片
 app.post("/upload", upload.single("image"), async (req, res) => {
   try {
     const file = req.file;
@@ -103,57 +82,11 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 
     res.json(newEntry);
   } catch (error) {
-    console.error("❌ Upload Error:", error);
-    res.status(500).json({ error: "圖片上傳失敗", message: error.message });
+    res.status(500).json({ error: "圖片上傳失敗" });
   }
 });
 
-// 🔹 分析圖片與補充說明
-app.post("/analyze", async (req, res) => {
-  const { id } = req.body;
-  try {
-    const images = JSON.parse(fs.readFileSync(DATA_FILE));
-    const target = images.find((img) => img.id === id);
-    if (!target) return res.status(404).json({ error: "找不到圖片紀錄" });
-
-    const supplements = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
-    const extraNote = supplements[id] || "";
-
-    const messages = [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: `你是一位專業營養師，請根據這張圖片以及補充說明內容來進行分析，請回覆下列項目：\n\n1. 食物項目\n2. 根據圖片與補充說明來估計熱量（卡路里）、碳水化合物(公克)、蛋白質(公克)、脂肪(公克)\n3. 餐點健康程度分析\n4. 飲食建議（如增加蔬菜、降低油脂）\n\n補充說明如下：\n${extraNote}\n\n請使用繁體中文回答，語氣自然簡潔，若無法辨識請明確說明，並移除多餘符號。`,
-          },
-          {
-            type: "image_url",
-            image_url: { url: target.url },
-          },
-        ],
-      },
-    ];
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages,
-    });
-
-    const result = response.choices[0].message.content || "無法取得分析結果";
-    target.analysis = result;
-
-    const updatedData = images.map((img) => (img.id === id ? target : img));
-    fs.writeFileSync(DATA_FILE, JSON.stringify(updatedData, null, 2));
-
-    res.json({ analysis: result });
-  } catch (err) {
-    console.error("分析失敗：", err);
-    res.status(500).json({ error: "分析失敗" });
-  }
-});
-
-// 🔹 紀錄讀取與刪除
+// 取得所有圖片紀錄
 app.get("/records", (req, res) => {
   try {
     const data = JSON.parse(fs.readFileSync(DATA_FILE));
@@ -163,27 +96,85 @@ app.get("/records", (req, res) => {
   }
 });
 
+// 分析圖片（搭配補充說明）
+app.post("/analyze", async (req, res) => {
+  try {
+    const { id, supplement } = req.body;
+    const data = JSON.parse(fs.readFileSync(DATA_FILE));
+    const entry = data.find((d) => d.id === id);
+    if (!entry) return res.status(404).json({ error: "找不到圖片紀錄" });
+
+    const url = `https://image-analyzer-backend-8s8u.onrender.com/uploads/${entry.filename}`;
+    const promptText = supplement?.trim()
+      ? `這是使用者的補充說明：「${supplement}」。請一併參考此資訊與圖片進行以下任務：`
+      : "";
+
+    const prompt = `${promptText}你是一位專業營養師，請根據這張圖片回覆下列項目：\n\n1. 食物項目\n2. 根據圖片來估計熱量（卡路里）、碳水化合物(公克)、蛋白質(公克)、脂肪(公克)\n3. 餐點健康程度分析\n4. 飲食建議（如增加蔬菜、降低油脂）\n\n請使用繁體中文回答，若無法辨識請回覆「無法清楚辨識食物」。`;
+
+    const gptResponse = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url } },
+          ],
+        },
+      ],
+    });
+
+    const result = gptResponse.choices[0].message.content || "無法取得分析結果";
+    entry.analysis = result;
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
+    // 儲存補充文字
+    const supplementData = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
+    supplementData[id] = supplement || "";
+    fs.writeFileSync(SUPPLEMENT_FILE, JSON.stringify(supplementData, null, 2));
+
+    res.json({ success: true, analysis: result });
+  } catch (err) {
+    console.error("分析錯誤：", err);
+    res.status(500).json({ error: "分析失敗" });
+  }
+});
+
+// 取得補充文字
+app.get("/supplements", (req, res) => {
+  try {
+    const data = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "讀取補充資料失敗" });
+  }
+});
+
+// 刪除圖片紀錄
 app.delete("/records/:id", (req, res) => {
   const { id } = req.params;
   try {
     const data = JSON.parse(fs.readFileSync(DATA_FILE));
+    const record = data.find((r) => r.id === id);
+    if (!record) return res.status(404).json({ error: "找不到紀錄" });
+
     const updated = data.filter((r) => r.id !== id);
     fs.writeFileSync(DATA_FILE, JSON.stringify(updated, null, 2));
 
-    const record = data.find((r) => r.id === id);
-    if (record) {
-      const filePath = path.join(UPLOAD_DIR, record.filename);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    }
+    const filePath = path.join(UPLOAD_DIR, record.filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    const supplementData = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
+    delete supplementData[id];
+    fs.writeFileSync(SUPPLEMENT_FILE, JSON.stringify(supplementData, null, 2));
 
     res.json({ success: true });
   } catch (e) {
-    console.error("刪除紀錄失敗：", e);
-    res.status(500).json({ error: "刪除紀錄失敗" });
+    res.status(500).json({ error: "刪除失敗" });
   }
 });
 
-// 🔹 建議攝取量分析
+// 建議攝取量（GPT）
 app.get("/recommendation", async (req, res) => {
   try {
     const profile = JSON.parse(fs.readFileSync(PROFILE_FILE));
@@ -191,7 +182,7 @@ app.get("/recommendation", async (req, res) => {
       return res.status(400).json({ error: "尚未填寫個人資料" });
     }
 
-    const prompt = `以下是使用者的基本資料：\n性別：${profile.gender}\n年齡：${profile.age} 歲\n身高：${profile.height} cm\n體重：${profile.weight} kg\n目標：${profile.goal}。請根據這些資訊，估算每日建議攝取熱量、蛋白質、脂肪、碳水化合物，並簡單說明依據來源，使用繁體中文以台灣人的語氣回覆。`;
+    const prompt = `以下是使用者的基本資料：\n性別：${profile.gender}\n年齡：${profile.age} 歲\n身高：${profile.height} cm\n體重：${profile.weight} kg\n目標：${profile.goal}。請你根據這些資訊，估算每日建議攝取的熱量（大卡）、蛋白質（公克）、脂肪（公克）、碳水化合物（公克），並簡單說明建議來源（如：依據 WHO 建議、衛福部建議、TDEE 等），使用繁體中文以台灣人的語氣為主。`;
 
     const gptRes = await openai.chat.completions.create({
       model: "gpt-4o",
