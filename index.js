@@ -89,6 +89,29 @@ app.get("/records", (req, res) => {
   }
 });
 
+app.delete("/records/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE));
+    const record = data.find((r) => r.id === id);
+    if (!record) return res.status(404).json({ error: "找不到紀錄" });
+
+    const updated = data.filter((r) => r.id !== id);
+    fs.writeFileSync(DATA_FILE, JSON.stringify(updated, null, 2));
+
+    const filePath = path.join(UPLOAD_DIR, record.filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    const supplementData = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
+    delete supplementData[id];
+    fs.writeFileSync(SUPPLEMENT_FILE, JSON.stringify(supplementData, null, 2));
+
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: "刪除失敗" });
+  }
+});
+
 app.get("/supplements", (req, res) => {
   try {
     const data = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
@@ -122,7 +145,7 @@ app.post("/analyze", async (req, res) => {
 - 碳水化合物（公克）：
 - 蛋白質（公克）：
 - 脂肪（公克）：
-
+(請記得要加上單位)
 3. 💡 健康分析（200字內）：
 - 評估此餐是否均衡、是否高糖/高脂/高鈉，並提供合理推測。
 
