@@ -30,7 +30,78 @@ app.use("/uploads", express.static(UPLOAD_DIR));
 const upload = multer({ dest: UPLOAD_DIR });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ... 其他路由略 ...
+app.get("/", (req, res) => {
+  res.send("✅ 健康日記分析師 API 已啟動");
+});
+
+// 取得個人資訊
+app.get("/profile", (req, res) => {
+  try {
+    const profile = JSON.parse(fs.readFileSync(PROFILE_FILE));
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ error: "讀取個人資料失敗" });
+  }
+});
+
+// 儲存個人資訊
+app.post("/profile", (req, res) => {
+  const profile = req.body;
+  try {
+    fs.writeFileSync(PROFILE_FILE, JSON.stringify(profile, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "儲存個人資料失敗" });
+  }
+});
+
+// 上傳圖片
+app.post("/upload", upload.single("image"), (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "請選擇圖片上傳" });
+
+    const timestamp = new Date().toISOString();
+    const id = uuidv4();
+    const url = `/uploads/${file.filename}`;
+
+    const newEntry = {
+      id,
+      filename: file.filename,
+      url,
+      timestamp,
+      analysis: "",
+    };
+
+    const data = JSON.parse(fs.readFileSync(DATA_FILE));
+    data.push(newEntry);
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
+    res.json(newEntry);
+  } catch (err) {
+    res.status(500).json({ error: "圖片上傳失敗" });
+  }
+});
+
+// 取得所有圖片紀錄
+app.get("/records", (req, res) => {
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE));
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "讀取紀錄失敗" });
+  }
+});
+
+// 取得補充文字
+app.get("/supplements", (req, res) => {
+  try {
+    const data = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "讀取補充資料失敗" });
+  }
+});
 
 // 建議攝取量（GPT）
 app.get("/recommendation", async (req, res) => {
