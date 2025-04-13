@@ -106,7 +106,7 @@ app.post("/analyze", async (req, res) => {
 
     const url = `https://image-analyzer-backend-8s8u.onrender.com/uploads/${entry.filename}`;
     const promptText = supplement?.trim()
-      ? `這是使用者的補充說明：「${supplement}」。請一併參考此資訊與圖片進行以下任務：`
+      ? `這是使用者的補充說明：「${supplement}」。即使圖片中未完全顯示，請綜合考慮補充文字與圖片內容一併分析:：`
       : "";
 
     const prompt = `${promptText}你是一位專業營養師，請根據這張圖片回覆下列項目：\n\n1. 食物項目\n2. 根據圖片來估計熱量（卡路里）、碳水化合物(公克)、蛋白質(公克)、脂肪(公克)\n3. 餐點健康程度分析\n4. 飲食建議（如增加蔬菜、降低油脂）\n\n請使用繁體中文回答，若無法辨識請回覆「無法清楚辨識食物」。`;
