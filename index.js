@@ -10,7 +10,6 @@ require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-A;
 
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 const DATA_FILE = path.join(__dirname, "data.json");
