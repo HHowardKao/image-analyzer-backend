@@ -23,7 +23,15 @@ if (!fs.existsSync(PROFILE_FILE))
 if (!fs.existsSync(SUPPLEMENT_FILE))
   fs.writeFileSync(SUPPLEMENT_FILE, JSON.stringify({}));
 
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "https://your-frontend-url.com"],
+    methods: ["GET", "POST", "DELETE"],
+    allowedHeaders: ["Content-Type"],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 app.use("/uploads", express.static(UPLOAD_DIR));
 
