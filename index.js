@@ -53,6 +53,12 @@ app.get("/profile", (req, res) => {
 
 app.post("/profile", (req, res) => {
   const profile = req.body;
+
+  // ✅ 儲存前清除 recommendationText，避免使用舊建議
+  if (profile.recommendationText) {
+    delete profile.recommendationText;
+  }
+
   try {
     fs.writeFileSync(PROFILE_FILE, JSON.stringify(profile, null, 2));
     res.json({ success: true });
