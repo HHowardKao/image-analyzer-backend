@@ -7,6 +7,7 @@ const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const OpenAI = require("openai");
 require("dotenv").config();
+const { router: authRouter, authMiddleware } = require("./auth");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -34,6 +35,12 @@ app.use(
 
 app.use(express.json());
 app.use("/uploads", express.static(UPLOAD_DIR));
+
+// 認證路由
+app.use("/auth", authRouter);
+
+// 保護需要認證的路由
+app.use("/api", authMiddleware);
 
 const upload = multer({ dest: UPLOAD_DIR });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
