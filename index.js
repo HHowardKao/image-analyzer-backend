@@ -32,6 +32,15 @@ app.use(
     credentials: true,
   })
 );
+const cors = require("cors");
+
+app.use(
+  cors({
+    origin: "http://localhost:5173", // 或 '*' 允許全部，建議開發用
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"], // ⬅️ 加上 Authorization
+  })
+);
 
 app.use(express.json());
 app.use("/uploads", express.static(UPLOAD_DIR));
