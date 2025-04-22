@@ -28,17 +28,8 @@ app.use(
   cors({
     origin: ["http://localhost:5173", "https://your-frontend-url.com"],
     methods: ["GET", "POST", "DELETE"],
-    allowedHeaders: ["Content-Type"],
+    allowedHeaders: ["Content-Type", , "Authorization"],
     credentials: true,
-  })
-);
-const cors = require("cors");
-
-app.use(
-  cors({
-    origin: "http://localhost:5173", // 或 '*' 允許全部，建議開發用
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"], // ⬅️ 加上 Authorization
   })
 );
 
