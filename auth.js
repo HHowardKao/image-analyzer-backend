@@ -9,14 +9,6 @@ const USERS_FILE = path.join(__dirname, "users.json");
 const JWT_SECRET = "your-secret-key"; // 在實際環境中應該使用環境變數
 const cors = require("cors");
 
-app.use(
-  cors({
-    origin: "http://localhost:5173", // 或 '*' 允許全部，建議開發用
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"], // ⬅️ 加上 Authorization
-  })
-);
-
 // 確保 users.json 存在
 if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify([]), "utf8");
