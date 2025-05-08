@@ -16,6 +16,7 @@ const UPLOAD_DIR = path.join(__dirname, "uploads");
 const DATA_FILE = path.join(__dirname, "data.json");
 const PROFILE_FILE = path.join(__dirname, "profile.json");
 const SUPPLEMENT_FILE = path.join(__dirname, "supplements.json");
+const NUTRITION_FILE = path.join(__dirname, "nutrition.json");
 
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, JSON.stringify([]));
@@ -23,6 +24,8 @@ if (!fs.existsSync(PROFILE_FILE))
   fs.writeFileSync(PROFILE_FILE, JSON.stringify({}));
 if (!fs.existsSync(SUPPLEMENT_FILE))
   fs.writeFileSync(SUPPLEMENT_FILE, JSON.stringify({}));
+if (!fs.existsSync(NUTRITION_FILE))
+  fs.writeFileSync(NUTRITION_FILE, JSON.stringify({}));
 
 app.use(
   cors({
@@ -73,6 +76,39 @@ app.post("/profile", (req, res) => {
     res.status(500).json({ error: "儲存個人資料失敗" });
   }
 });
+
+// 從分析結果中提取營養數據
+function extractNutritionData(analysisText) {
+  if (!analysisText) return null;
+
+  const caloriesMatch = analysisText.match(/熱量.*?(\d+).*?大卡/);
+  const carbsMatch = analysisText.match(/碳水化合物.*?(\d+).*?公克/);
+  const proteinMatch = analysisText.match(/蛋白質.*?(\d+).*?公克/);
+  const fatMatch = analysisText.match(/脂肪.*?(\d+).*?公克/);
+
+  return {
+    calories: caloriesMatch ? parseInt(caloriesMatch[1]) : 0,
+    carbs: carbsMatch ? parseInt(carbsMatch[1]) : 0,
+    protein: proteinMatch ? parseInt(proteinMatch[1]) : 0,
+    fat: fatMatch ? parseInt(fatMatch[1]) : 0,
+  };
+}
+
+// 儲存營養數據到專用文件
+function saveNutritionData(recordId, timestamp, nutritionData) {
+  try {
+    const nutritionDB = JSON.parse(fs.readFileSync(NUTRITION_FILE));
+    nutritionDB[recordId] = {
+      timestamp,
+      ...nutritionData,
+    };
+    fs.writeFileSync(NUTRITION_FILE, JSON.stringify(nutritionDB, null, 2));
+    return true;
+  } catch (err) {
+    console.error("儲存營養數據失敗:", err);
+    return false;
+  }
+}
 
 app.post("/upload", upload.single("image"), (req, res) => {
   try {
@@ -126,6 +162,11 @@ app.delete("/records/:id", (req, res) => {
     const supplementData = JSON.parse(fs.readFileSync(SUPPLEMENT_FILE));
     delete supplementData[id];
     fs.writeFileSync(SUPPLEMENT_FILE, JSON.stringify(supplementData, null, 2));
+
+    // 同時刪除對應的營養數據
+    const nutritionData = JSON.parse(fs.readFileSync(NUTRITION_FILE));
+    delete nutritionData[id];
+    fs.writeFileSync(NUTRITION_FILE, JSON.stringify(nutritionData, null, 2));
 
     res.json({ success: true });
   } catch (e) {
@@ -196,10 +237,92 @@ app.post("/analyze", async (req, res) => {
     supplementData[id] = supplement || "";
     fs.writeFileSync(SUPPLEMENT_FILE, JSON.stringify(supplementData, null, 2));
 
+    // 提取並存儲營養數據
+    const nutritionData = extractNutritionData(result);
+    if (nutritionData) {
+      saveNutritionData(id, entry.timestamp, nutritionData);
+    }
+
     res.json({ success: true, analysis: result });
   } catch (err) {
     console.error("分析錯誤：", err);
     res.status(500).json({ error: "分析失敗" });
+  }
+});
+
+// 獲取營養分析數據
+app.get("/analytics", (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromDate = from ? new Date(from) : new Date(0);
+    const toDate = to ? new Date(to) : new Date();
+
+    const nutritionData = JSON.parse(fs.readFileSync(NUTRITION_FILE));
+
+    // 過濾並按日期排序數據
+    const filteredData = Object.values(nutritionData)
+      .filter((item) => {
+        const itemDate = new Date(item.timestamp);
+        return itemDate >= fromDate && itemDate <= toDate;
+      })
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // 按日期組織數據
+    const dates = [];
+    const calories = [];
+    const carbs = [];
+    const protein = [];
+    const fat = [];
+
+    // 創建日期到數據的映射
+    const dateMap = {};
+    filteredData.forEach((item) => {
+      // 提取日期部分 (YYYY-MM-DD)
+      const dateStr = item.timestamp.split("T")[0];
+
+      if (!dateMap[dateStr]) {
+        dateMap[dateStr] = {
+          count: 0,
+          calories: 0,
+          carbs: 0,
+          protein: 0,
+          fat: 0,
+        };
+      }
+
+      dateMap[dateStr].count += 1;
+      dateMap[dateStr].calories += item.calories || 0;
+      dateMap[dateStr].carbs += item.carbs || 0;
+      dateMap[dateStr].protein += item.protein || 0;
+      dateMap[dateStr].fat += item.fat || 0;
+    });
+
+    // 將映射轉換為數組
+    Object.keys(dateMap)
+      .sort()
+      .forEach((dateStr) => {
+        const date = new Date(dateStr);
+        const formattedDate = `${(date.getMonth() + 1)
+          .toString()
+          .padStart(2, "0")}/${date.getDate().toString().padStart(2, "0")}`;
+
+        dates.push(formattedDate);
+        calories.push(dateMap[dateStr].calories);
+        carbs.push(dateMap[dateStr].carbs);
+        protein.push(dateMap[dateStr].protein);
+        fat.push(dateMap[dateStr].fat);
+      });
+
+    res.json({
+      dates,
+      calories,
+      carbs,
+      protein,
+      fat,
+    });
+  } catch (err) {
+    console.error("獲取分析數據失敗:", err);
+    res.status(500).json({ error: "獲取分析數據失敗" });
   }
 });
 
@@ -258,6 +381,64 @@ app.get("/recommendation", async (req, res) => {
   } catch (err) {
     console.error("/recommendation error", err);
     res.status(500).json({ error: "產生建議失敗" });
+  }
+});
+
+// 聊天機器人 API
+app.post("/chat", async (req, res) => {
+  try {
+    const { message, profile } = req.body;
+
+    // 構建 prompt，將用戶的個人資料和目前的營養數據納入考量
+    let prompt = `你是一位專業的營養顧問。請針對以下問題提供專業、友善且有幫助的回答。問題: ${message}`;
+
+    // 如果有用戶資料，添加到 prompt
+    if (profile && Object.keys(profile).length > 0) {
+      prompt += `\n\n用戶資料：
+- 性別: ${profile.gender === "male" ? "男性" : "女性"}
+- 年齡: ${profile.age} 歲
+- 身高: ${profile.height} cm
+- 體重: ${profile.weight} kg`;
+
+      if (profile.goal) {
+        prompt += `\n- 健康目標: ${profile.goal}`;
+      }
+    }
+
+    // 添加用戶的最近營養攝取情況
+    const nutritionData = JSON.parse(fs.readFileSync(NUTRITION_FILE));
+    if (Object.keys(nutritionData).length > 0) {
+      const recentEntries = Object.values(nutritionData)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 3);
+
+      if (recentEntries.length > 0) {
+        prompt += `\n\n用戶最近的飲食記錄 (${recentEntries.length} 筆):`;
+        recentEntries.forEach((entry, index) => {
+          const date = new Date(entry.timestamp).toLocaleDateString("zh-TW");
+          prompt += `\n${index + 1}. ${date}: 熱量 ${
+            entry.calories
+          } 大卡, 碳水 ${entry.carbs}g, 蛋白質 ${entry.protein}g, 脂肪 ${
+            entry.fat
+          }g`;
+        });
+      }
+    }
+
+    prompt += "\n\n請提供專業但易懂的回答，使用繁體中文，並避免過長的回應。";
+
+    const gptRes = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const response =
+      gptRes.choices[0].message.content || "抱歉，我無法回答這個問題。";
+
+    res.json({ response });
+  } catch (err) {
+    console.error("聊天回應失敗:", err);
+    res.status(500).json({ error: "無法取得回應，請稍後再試" });
   }
 });
 
